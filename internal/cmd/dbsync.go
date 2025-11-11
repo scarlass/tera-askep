@@ -36,20 +36,21 @@ type SyncOperation struct {
 	ConfigFile string
 	Dry        bool
 	Profile    string
-	profile    *configs.ProfileConfig
 
-	logger  logger.Logger
-	cwd     string
-	targets []string
-	conf    struct {
-		Profile configs.ProfileConfigs `mapstructure:"profile"`
-		Target  configs.TargetConfigs  `mapstructure:"target"`
+	logger logger.Logger
+	cwd    string
+
+	confTargets []configs.TargetConfig
+	confProfile *configs.ProfileConfig
+	conf        struct {
+		Profiles configs.ProfileConfigs `mapstructure:"profile"`
+		Targets  configs.TargetConfigs  `mapstructure:"target"`
 	}
 }
 
 func (so *SyncOperation) setup(cmd *cobra.Command) {
 	fl := cmd.Flags()
-	// fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, "execute with sync to the database also print the html output (concated with script & stylesheet)")
+	fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, "run without sync to the database and print the html output (concated with script & stylesheet)")
 	fl.StringVarP(&SyncOp.ConfigFile, "config", "c", "", "configuration file path, also set virtual cwd based on the configuration file directory")
 	fl.StringVarP(&SyncOp.Profile, "profile", "p", "default", "specify connection profile to use in configuration file")
 
@@ -58,40 +59,41 @@ func (so *SyncOperation) setup(cmd *cobra.Command) {
 }
 
 func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
-	cwd, err := configs.Load(so.logger, so.ConfigFile, &so.conf)
+	cwd, err := configs.Load(so.ConfigFile, &so.conf)
 	if err != nil {
 		return err
 	}
 
 	so.cwd = cwd
 	so.logger.SetDry(so.Dry)
-	so.conf.Profile.Configure()
-	so.conf.Target.Configure(cwd, "forms")
+	so.conf.Profiles.Configure()
+	so.conf.Targets.Configure(cwd)
 
 	if so.Profile == "" {
 		return core.ErrEmptyProfile
 	}
 
-	if so.profile, err = so.conf.Profile.ValidateAndGet(so.Profile); err != nil {
+	if so.confProfile, err = so.conf.Profiles.ValidateAndGet(so.Profile); err != nil {
 		return err
 	} else {
-		so.logger.Printf(`using "%s" profile`, so.profile.Name)
+		so.logger.Printf(`using "%s" profile`, so.confProfile.Name)
 	}
 
-	if len(so.conf.Target) == 0 {
+	if len(so.conf.Targets) == 0 {
 		return core.ErrNoTargetAvailable
 	} else if len(args) == 0 {
 		return core.ErrArgNoTargetSpecified
 	}
 
+	so.logger.Debug("available targets", "targets", so.conf.Targets.Keys())
 	so.logger.Debug("command arguments", "args", args)
 
-	so.targets = make([]string, 0)
+	so.confTargets = make([]configs.TargetConfig, 0)
 	for _, spec := range args {
-		if act, ok := so.conf.Target.Included(spec); !ok {
+		if act, ok := so.conf.Targets.Included(spec); !ok {
 			return fmt.Errorf("unknown target (%s) in argument(s)", spec)
 		} else {
-			so.targets = append(so.targets, act)
+			so.confTargets = append(so.confTargets, so.conf.Targets[act])
 		}
 	}
 
@@ -99,14 +101,32 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 }
 
 func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
+	if so.Dry {
+		return so.action_dry()
+	}
+
+	return so.action_main()
+}
+func (so *SyncOperation) action_dry() error {
+	for _, conf := range so.confTargets {
+		content, err := so.concat_target_files(conf)
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(content)
+	}
+	return nil
+}
+func (so *SyncOperation) action_main() error {
 	psql, err := exec.LookPath("psql")
 	if err == nil {
 		var wg sync.WaitGroup
 
 		so.logger.Printf("using local psql executable\n")
-		for _, targetName := range so.targets {
+		for _, conf := range so.confTargets {
 			wg.Go(func() {
-				conf := so.conf.Target[targetName]
 				content, err := so.concat_target_files(conf)
 				if err != nil {
 					panic(err)
@@ -122,7 +142,7 @@ func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
 	} else {
 		so.logger.Printf("psql executable not found, connecting through ssh...")
 		so.logger.Printf("validating ssh connection settings")
-		if err := so.profile.Ssh.Validate(); err != nil {
+		if err := so.confProfile.Ssh.Validate(); err != nil {
 			return err
 		}
 
@@ -181,14 +201,14 @@ func (so *SyncOperation) psql_prepare_arguments(alid int, content string) []stri
 		map[string]any{
 			"alid":    alid,
 			"content": b64Content,
-			"schema":  so.profile.Database.Schema,
+			"schema":  so.confProfile.Database.Schema,
 		}))
 
 	return []string{
-		"-h", so.profile.Database.Host,
-		"-p", strconv.Itoa(so.profile.Database.Port),
-		"-U", so.profile.Database.User,
-		"-d", so.profile.Database.Database,
+		"-h", so.confProfile.Database.Host,
+		"-p", strconv.Itoa(so.confProfile.Database.Port),
+		"-U", so.confProfile.Database.User,
+		"-d", so.confProfile.Database.Database,
 		"-c", sql,
 	}
 }
@@ -197,7 +217,7 @@ func (so *SyncOperation) psql_local_exec(psql string, target configs.TargetConfi
 	so.logger.Printf("[%s] execute %q", target.Name, strings.Join(args[0:len(args)-2], " "))
 
 	cmd := exec.Command(psql, args...)
-	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.profile.Database.Password)
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.confProfile.Database.Password)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

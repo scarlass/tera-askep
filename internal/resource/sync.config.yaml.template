@@ -17,7 +17,6 @@ profile:
 
 target:
     # target name are case-insensitive
-
     # this entry only for example and will be truncated at runtime
     "*":
         # askep list row id
@@ -29,9 +28,8 @@ target:
         # - "target" name of the target
 
         # html entry, make sure it's a valid path
-        html: "{{ "{{ .target }}" }}index.html"
+        html: "{{ "{{ .target }}" }}/index.html"
         # script entry, will be embed the content to html if the file exist
         script: "{{ "{{.target}}" }}/index.js"
         # stylesheet entry, same as script
-        # example value with go template
         stylesheet: "{{ "{{ .cwd }}" }}/index.css"

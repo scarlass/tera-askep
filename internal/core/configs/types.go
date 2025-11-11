@@ -7,27 +7,36 @@ import (
 	"maps"
 	"path/filepath"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/scarlass/tera-askep/internal/core"
 )
 
-type Configurable interface {
-	Configure(prefix string)
-}
-
-type Validateable interface {
-	Validate() error
-}
-
 type SSHConfig struct {
+	validated   bool
+	validatedMu *sync.Mutex
+
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`
 	User     string `mapstructure:"user"`
 	Password string `mapstructure:"password"`
 }
 
+func (sc *SSHConfig) configure() {
+	if sc.validatedMu == nil {
+		sc.validatedMu = &sync.Mutex{}
+	}
+}
 func (sc *SSHConfig) Validate() error {
+	if sc.validatedMu != nil {
+		sc.validatedMu.Lock()
+		defer sc.validatedMu.Unlock()
+	}
+
+	if sc.validated {
+		return nil
+	}
+
 	if sc.Host == "" {
 		sc.Host = "192.168.0.11"
 	}
@@ -41,6 +50,7 @@ func (sc *SSHConfig) Validate() error {
 		return errors.New("ssh.password cannot be empty")
 	}
 
+	sc.validated = true
 	return nil
 }
 
@@ -53,6 +63,7 @@ type DatabaseConfig struct {
 	Schema   string `mapstructure:"schema"`
 }
 
+func (dc *DatabaseConfig) configure() {}
 func (dc *DatabaseConfig) Validate() error {
 	if dc.Host == "" {
 		dc.Host = "192.168.0.15"
@@ -75,9 +86,9 @@ func (dc *DatabaseConfig) Validate() error {
 	return nil
 }
 
-type WatchConfig struct {
-	Delay time.Duration `mapstructure:"delay"`
-}
+// type WatchConfig struct {
+// 	Delay time.Duration `mapstructure:"delay"`
+// }
 
 type (
 	ProfileConfigs map[string]ProfileConfig
@@ -91,10 +102,16 @@ type (
 func (pcs ProfileConfigs) ValidateAndGet(profile string) (*ProfileConfig, error) {
 	if act, ok := pcs.Included(profile); ok {
 		p := pcs[act]
+		p.Ssh.configure()
+		p.Database.configure()
+
 		if err := p.Database.Validate(); err != nil {
 			return nil, err
 		}
 
+		if pcs[act] != p {
+			pcs[act] = p
+		}
 		return &p, nil
 	}
 	return nil, fmt.Errorf("profile %s not found", profile)
@@ -110,7 +127,6 @@ func (pcs ProfileConfigs) Included(profile string) (act string, exist bool) {
 func (pcs *ProfileConfigs) Configure() {
 	for name, profile := range *pcs {
 		profile.Name = name
-
 		(*pcs)[name] = profile
 	}
 }
@@ -141,19 +157,22 @@ type TargetConfig struct {
 	Html       string `mapstructure:"html"`
 	Stylesheet string `mapstructure:"stylesheet"`
 	Script     string `mapstructure:"script"`
+	Options    struct {
+		ForceSSH bool `mapstructure:"force-ssh"`
+	} `mapstructure:"options"`
 }
 
-func (ts *TargetConfigs) Configure(cwd, subdir string) {
+func (ts *TargetConfigs) Configure(cwd string) {
 	delete(*ts, "*")
 
 	for name, conf := range *ts {
-		conf.SetPaths(cwd, subdir, name)
+		conf.SetPaths(cwd, name)
 		(*ts)[name] = conf
 	}
 }
 
-func (t *TargetConfig) SetPaths(cwd, subdir, name string) {
-	defaultPath := filepath.Join(cwd, subdir, name)
+func (t *TargetConfig) SetPaths(cwd, name string) {
+	defaultPath := filepath.Join(cwd, name)
 	t.Name = name
 
 	slog.Debug("set html path", "source", t.Html)

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/scarlass/tera-askep/internal/core/logger"
 	"github.com/scarlass/tera-askep/internal/core/utils"
 	"github.com/spf13/viper"
 )
@@ -37,7 +36,7 @@ func Lookup(cwd string, filename string) (string, error) {
 	return "", os.ErrNotExist
 }
 
-func Load(logger logger.Logger, config string, target any) (cwd string, err error) {
+func Load(config string, target any) (cwd string, err error) {
 	utils.MustPointer(target)
 
 	if config == "" {
@@ -57,9 +56,9 @@ func Load(logger logger.Logger, config string, target any) (cwd string, err erro
 		}
 	}
 
-	if logger != nil {
-		logger.Printf("using configuration found at %s", config)
-	}
+	// if logger != nil {
+	// 	logger.Printf("using configuration found at %s", config)
+	// }
 
 	file, err := os.ReadFile(config)
 	if err != nil {

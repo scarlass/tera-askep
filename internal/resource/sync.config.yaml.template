@@ -1,22 +1,37 @@
-ssh:
-    host: 192.168.0.11
-    port: 22
-    user: <changeme>
-    password: <changeme>
-database:
-    host: 192.168.0.15
-    port: 5432
-    user: {{ .db_user }}
-    password: {{ .db_pass }}
-    database: {{ .db_database }}
+# connection profile
+profile:
+    # profile name are case-insensitive
+
+    default:
+        ssh:
+            host: 192.168.0.11
+            port: 22
+            user: <changeme>
+            password: <changeme>
+        database:
+            host: 192.168.0.15
+            port: 5432
+            user: <changeme>
+            password: <changeme>
+            database: <changeme>
+
 target:
+    # target name are case-insensitive
+
+    # this entry only for example and will be truncated at runtime
     "*":
+        # askep list row id
         alid: 123
-        # the paths here can use go text template and can be an absolute path or relative to "cwd"
-        # available go text template variables are:
+
+        # the paths here can use go template and can be an absolute path or relative to "cwd"
+        # available template variables are:
         # - "cwd" or current working directory relative to the configuration file directory
         # - "target" name of the target
-        html: "index.html"
-        script: "index.js"
-        ## example with go text template
+
+        # html entry, make sure it's a valid path
+        html: "{{ "{{ .target }}" }}index.html"
+        # script entry, will be embed the content to html if the file exist
+        script: "{{ "{{.target}}" }}/index.js"
+        # stylesheet entry, same as script
+        # example value with go template
         stylesheet: "{{ "{{ .cwd }}" }}/index.css"

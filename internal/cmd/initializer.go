@@ -48,10 +48,7 @@ func (io *InitOperation) action(cmd *cobra.Command, args []string) error {
 
 	filenameTemplate := fmt.Sprintf("%s.template", utils.DEFAULT_CONF_FILE)
 	content, err := resource.Tmpl.Get(filenameTemplate, map[string]any{
-		"conf_loc":    cwd,
-		"db_user":     "terakorp",
-		"db_pass":     "teramed1k@bDgV5",
-		"db_database": "teramedik_master",
+		"conf_loc": cwd,
 	})
 
 	if err != nil {

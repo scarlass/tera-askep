@@ -35,21 +35,23 @@ func init() {
 type SyncOperation struct {
 	ConfigFile string
 	Dry        bool
+	Profile    string
+	profile    *configs.ProfileConfig
 
 	logger  logger.Logger
 	cwd     string
 	targets []string
 	conf    struct {
-		Database configs.DatabaseConfig `mapstructure:"database"`
-		Ssh      configs.SSHConfig      `mapstructure:"ssh"`
-		Target   configs.TargetConfigs  `mapstructure:"target"`
+		Profile configs.ProfileConfigs `mapstructure:"profile"`
+		Target  configs.TargetConfigs  `mapstructure:"target"`
 	}
 }
 
 func (so *SyncOperation) setup(cmd *cobra.Command) {
 	fl := cmd.Flags()
-	fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, "execute with sync to the database also print the html output (concated with script & stylesheet)")
+	// fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, "execute with sync to the database also print the html output (concated with script & stylesheet)")
 	fl.StringVarP(&SyncOp.ConfigFile, "config", "c", "", "configuration file path, also set virtual cwd based on the configuration file directory")
+	fl.StringVarP(&SyncOp.Profile, "profile", "p", "default", "specify connection profile to use in configuration file")
 
 	cmd.PreRunE = so.preAction
 	cmd.RunE = so.action
@@ -62,12 +64,19 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 	}
 
 	so.cwd = cwd
+	so.logger.SetDry(so.Dry)
+	so.conf.Profile.Configure()
 	so.conf.Target.Configure(cwd, "forms")
-	if err := so.conf.Database.Validate(); err != nil {
-		return err
+
+	if so.Profile == "" {
+		return core.ErrEmptyProfile
 	}
 
-	so.logger.Debug("target configurations", "conf", so.conf.Target)
+	if so.profile, err = so.conf.Profile.ValidateAndGet(so.Profile); err != nil {
+		return err
+	} else {
+		so.logger.Printf(`using "%s" profile`, so.profile.Name)
+	}
 
 	if len(so.conf.Target) == 0 {
 		return core.ErrNoTargetAvailable
@@ -113,7 +122,7 @@ func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
 	} else {
 		so.logger.Printf("psql executable not found, connecting through ssh...")
 		so.logger.Printf("validating ssh connection settings")
-		if err := so.conf.Ssh.Validate(); err != nil {
+		if err := so.profile.Ssh.Validate(); err != nil {
 			return err
 		}
 
@@ -172,14 +181,14 @@ func (so *SyncOperation) psql_prepare_arguments(alid int, content string) []stri
 		map[string]any{
 			"alid":    alid,
 			"content": b64Content,
-			"schema":  so.conf.Database.Schema,
+			"schema":  so.profile.Database.Schema,
 		}))
 
 	return []string{
-		"-h", so.conf.Database.Host,
-		"-p", strconv.Itoa(so.conf.Database.Port),
-		"-U", so.conf.Database.User,
-		"-d", so.conf.Database.Database,
+		"-h", so.profile.Database.Host,
+		"-p", strconv.Itoa(so.profile.Database.Port),
+		"-U", so.profile.Database.User,
+		"-d", so.profile.Database.Database,
 		"-c", sql,
 	}
 }
@@ -188,7 +197,7 @@ func (so *SyncOperation) psql_local_exec(psql string, target configs.TargetConfi
 	so.logger.Printf("[%s] execute %q", target.Name, strings.Join(args[0:len(args)-2], " "))
 
 	cmd := exec.Command(psql, args...)
-	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.conf.Database.Password)
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.profile.Database.Password)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

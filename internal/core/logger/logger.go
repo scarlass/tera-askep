@@ -10,6 +10,7 @@ type logger_level struct {
 }
 
 type Logger interface {
+	SetDry(bool)
 	Printf(msg string, args ...any)
 
 	Infof(msg string, args ...any)
@@ -21,10 +22,17 @@ type Logger interface {
 }
 
 type loggerImpl struct {
-	s *slog.Logger
+	s   *slog.Logger
+	dry bool
 }
 
+func (l *loggerImpl) SetDry(dry bool) {
+	l.dry = dry
+}
 func (l *loggerImpl) Printf(msg string, args ...any) {
+	if l.dry {
+		return
+	}
 	fmt.Println(fmt.Sprintf(msg, args...))
 }
 func (l *loggerImpl) Infof(msg string, args ...any) {
@@ -57,5 +65,5 @@ func NewLogger(cmd ...string) Logger {
 		slogger = slogger.WithGroup(cmd[0])
 	}
 
-	return &loggerImpl{slogger}
+	return &loggerImpl{slogger, false}
 }

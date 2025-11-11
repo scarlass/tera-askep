@@ -2,6 +2,7 @@ package configs
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"path/filepath"
@@ -76,6 +77,42 @@ func (dc *DatabaseConfig) Validate() error {
 
 type WatchConfig struct {
 	Delay time.Duration `mapstructure:"delay"`
+}
+
+type (
+	ProfileConfigs map[string]ProfileConfig
+	ProfileConfig  struct {
+		Name     string
+		Ssh      SSHConfig      `mapstructure:"ssh"`
+		Database DatabaseConfig `mapstructure:"database"`
+	}
+)
+
+func (pcs ProfileConfigs) ValidateAndGet(profile string) (*ProfileConfig, error) {
+	if act, ok := pcs.Included(profile); ok {
+		p := pcs[act]
+		if err := p.Database.Validate(); err != nil {
+			return nil, err
+		}
+
+		return &p, nil
+	}
+	return nil, fmt.Errorf("profile %s not found", profile)
+}
+func (pcs ProfileConfigs) Included(profile string) (act string, exist bool) {
+	for k := range pcs {
+		if strings.EqualFold(k, profile) {
+			return k, true
+		}
+	}
+	return profile, false
+}
+func (pcs *ProfileConfigs) Configure() {
+	for name, profile := range *pcs {
+		profile.Name = name
+
+		(*pcs)[name] = profile
+	}
 }
 
 type TargetConfigs map[string]TargetConfig

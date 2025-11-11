@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +13,7 @@ import (
 	"github.com/scarlass/tera-askep/internal/core"
 	"github.com/scarlass/tera-askep/internal/core/configs"
 	"github.com/scarlass/tera-askep/internal/core/logger"
+	"github.com/scarlass/tera-askep/internal/core/ssh"
 	"github.com/scarlass/tera-askep/internal/core/utils"
 	"github.com/spf13/cobra"
 )
@@ -46,9 +46,14 @@ type SyncOperation struct {
 		Profiles configs.ProfileConfigs `mapstructure:"profile"`
 		Targets  configs.TargetConfigs  `mapstructure:"target"`
 	}
+
+	ssh   *ssh.SSHClient
+	sshMu *sync.Mutex
 }
 
 func (so *SyncOperation) setup(cmd *cobra.Command) {
+	so.sshMu = &sync.Mutex{}
+
 	fl := cmd.Flags()
 	fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, "run without sync to the database and print the html output (concated with script & stylesheet)")
 	fl.StringVarP(&SyncOp.ConfigFile, "config", "c", "", "configuration file path, also set virtual cwd based on the configuration file directory")
@@ -121,33 +126,37 @@ func (so *SyncOperation) action_dry() error {
 }
 func (so *SyncOperation) action_main() error {
 	psql, err := exec.LookPath("psql")
-	if err == nil {
-		var wg sync.WaitGroup
+	psqlExist := err == nil
 
+	if psqlExist {
 		so.logger.Printf("using local psql executable\n")
-		for _, conf := range so.confTargets {
-			wg.Go(func() {
-				content, err := so.concat_target_files(conf)
-				if err != nil {
-					panic(err)
-				}
-
-				if err := so.psql_local_exec(psql, conf, content); err != nil {
-					panic(err)
-				}
-			})
-		}
-
-		wg.Wait()
-	} else {
-		so.logger.Printf("psql executable not found, connecting through ssh...")
-		so.logger.Printf("validating ssh connection settings")
-		if err := so.confProfile.Ssh.Validate(); err != nil {
-			return err
-		}
-
-		return so.psql_remote_exec()
 	}
+
+	defer so.ssh.Close()
+
+	var wg sync.WaitGroup
+	for _, conf := range so.confTargets {
+		wg.Go(func() {
+			content, err := so.concat_target_files(conf)
+			if err != nil {
+				panic(err)
+			}
+
+			so.logger.Debug("force ssh enabled ?",
+				"target", conf.Name,
+				"enabled", conf.Options.ForceSSH)
+
+			if conf.Options.ForceSSH || !psqlExist {
+				utils.Must(1, so.psql_remote_exec(conf, content))
+			} else {
+				utils.Must(1, so.psql_local_exec(psql, conf, content))
+			}
+
+			so.logger.Printf("[%s] success", conf.Name)
+		})
+	}
+	wg.Wait()
+
 	return nil
 }
 
@@ -214,7 +223,7 @@ func (so *SyncOperation) psql_prepare_arguments(alid int, content string) []stri
 }
 func (so *SyncOperation) psql_local_exec(psql string, target configs.TargetConfig, content string) error {
 	args := so.psql_prepare_arguments(target.Alid, content)
-	so.logger.Printf("[%s] execute %q", target.Name, strings.Join(args[0:len(args)-2], " "))
+	so.logger.Printf("[%s] psql prepared argument(s) %q", target.Name, strings.Join(args[0:len(args)-2], " "))
 
 	cmd := exec.Command(psql, args...)
 	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.confProfile.Database.Password)
@@ -225,9 +234,29 @@ func (so *SyncOperation) psql_local_exec(psql string, target configs.TargetConfi
 		return err
 	}
 
-	so.logger.Printf("[%s] success", target.Name)
 	return nil
 }
-func (so *SyncOperation) psql_remote_exec() error {
-	return errors.New("procedure not implemented")
+func (so *SyncOperation) psql_remote_exec(target configs.TargetConfig, content string) (err error) {
+	so.sshMu.Lock()
+	if so.ssh == nil {
+		if so.ssh, err = ssh.New(so.confProfile.Ssh); err != nil {
+			so.sshMu.Unlock()
+			panic(err)
+		}
+
+		so.logger.Printf("[%s] ssh client connected", target.Name)
+	}
+	so.sshMu.Unlock()
+
+	args := so.psql_prepare_arguments(target.Alid, content)
+	last := len(args) - 1
+
+	so.logger.Printf("[%s] psql prepared argument(s) %q", target.Name, strings.Join(args[0:len(args)-2], " "))
+	args[last] = fmt.Sprintf(`"%s"`, args[last])
+
+	if err := so.ssh.Exec(fmt.Sprintf("PGPASSWORD=%s; psql", so.confProfile.Database.Password), args...); err != nil {
+		return err
+	}
+
+	return nil
 }

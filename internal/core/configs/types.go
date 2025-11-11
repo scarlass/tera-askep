@@ -154,12 +154,13 @@ type TargetConfig struct {
 	Alid int `mapstructure:"alid"`
 
 	// Path       string
-	Html       string `mapstructure:"html"`
-	Stylesheet string `mapstructure:"stylesheet"`
-	Script     string `mapstructure:"script"`
-	Options    struct {
-		ForceSSH bool `mapstructure:"force-ssh"`
-	} `mapstructure:"options"`
+	Html       string             `mapstructure:"html"`
+	Stylesheet string             `mapstructure:"stylesheet"`
+	Script     string             `mapstructure:"script"`
+	Options    TargetOptionConfig `mapstructure:"options"`
+}
+type TargetOptionConfig struct {
+	ForceSSH bool `mapstructure:"force-ssh"`
 }
 
 func (ts *TargetConfigs) Configure(cwd string) {

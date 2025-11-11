@@ -78,7 +78,3 @@ func Load(config string, target any) (cwd string, err error) {
 
 	return
 }
-
-func Validate(conf any) {
-
-}

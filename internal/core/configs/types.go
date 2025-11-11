@@ -1,0 +1,151 @@
+package configs
+
+import (
+	"errors"
+	"log/slog"
+	"maps"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/scarlass/tera-askep/internal/core"
+)
+
+type Configurable interface {
+	Configure(prefix string)
+}
+
+type Validateable interface {
+	Validate() error
+}
+
+type SSHConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+}
+
+func (sc *SSHConfig) Validate() error {
+	if sc.Host == "" {
+		sc.Host = "192.168.0.11"
+	}
+	if sc.Port == 0 {
+		sc.Port = 22
+	}
+	if sc.User == "" {
+		return errors.New("ssh.user cannot be empty")
+	}
+	if sc.Password == "" {
+		return errors.New("ssh.password cannot be empty")
+	}
+
+	return nil
+}
+
+type DatabaseConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Database string `mapstructure:"database"`
+	Schema   string `mapstructure:"schema"`
+}
+
+func (dc *DatabaseConfig) Validate() error {
+	if dc.Host == "" {
+		dc.Host = "192.168.0.15"
+	}
+	if dc.Port == 0 {
+		dc.Port = 5432
+	}
+	if dc.User == "" {
+		return errors.New("database.user cannot be empty")
+	}
+	if dc.Password == "" {
+		return errors.New("database.password cannot be empty")
+	}
+	if dc.Database == "" {
+		dc.Database = "teramedik_master"
+	}
+	if dc.Schema == "" {
+		dc.Schema = "public"
+	}
+	return nil
+}
+
+type WatchConfig struct {
+	Delay time.Duration `mapstructure:"delay"`
+}
+
+type TargetConfigs map[string]TargetConfig
+
+func (tcs TargetConfigs) Keys() []string {
+	k := make([]string, 0)
+	for name, _ := range tcs {
+		k = append(k, name)
+	}
+	return k
+}
+func (tcs TargetConfigs) Included(target string) (actual string, exist bool) {
+	for k := range maps.Keys(tcs) {
+		if strings.EqualFold(target, k) {
+			return k, true
+		}
+	}
+	return "", false
+}
+
+type TargetConfig struct {
+	Name string
+	Alid int `mapstructure:"alid"`
+
+	// Path       string
+	Html       string `mapstructure:"html"`
+	Stylesheet string `mapstructure:"stylesheet"`
+	Script     string `mapstructure:"script"`
+}
+
+func (ts *TargetConfigs) Configure(cwd, subdir string) {
+	delete(*ts, "*")
+
+	for name, conf := range *ts {
+		conf.SetPaths(cwd, subdir, name)
+		(*ts)[name] = conf
+	}
+}
+
+func (t *TargetConfig) SetPaths(cwd, subdir, name string) {
+	defaultPath := filepath.Join(cwd, subdir, name)
+	t.Name = name
+
+	slog.Debug("set html path", "source", t.Html)
+	t.Html = t.withFilepath(cwd, t.Html, filepath.Join(defaultPath, "index.html"))
+
+	slog.Debug("set script path", "source", t.Script)
+	t.Script = t.withFilepath(cwd, t.Script, filepath.Join(defaultPath, "index.js"))
+
+	slog.Debug("set stylesheet path", "source", t.Stylesheet)
+	t.Stylesheet = t.withFilepath(cwd, t.Stylesheet, filepath.Join(defaultPath, "index.css"))
+}
+
+func (t *TargetConfig) withFilepath(cwd, source, defaults string) string {
+	if source == "" {
+		return defaults
+	}
+
+	s, err := core.ReplaceTemplateString(source, map[string]any{
+		"cwd":    cwd,
+		"target": t.Name,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	slog.Debug("replace file path output", "output", s)
+	if filepath.IsAbs(s) {
+		return s
+	}
+	return filepath.Join(cwd, s)
+}

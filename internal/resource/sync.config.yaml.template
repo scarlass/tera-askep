@@ -1,0 +1,22 @@
+ssh:
+    host: 192.168.0.11
+    port: 22
+    user: <changeme>
+    password: <changeme>
+database:
+    host: 192.168.0.15
+    port: 5432
+    user: {{ .db_user }}
+    password: {{ .db_pass }}
+    database: {{ .db_database }}
+target:
+    "*":
+        alid: 123
+        # the paths here can use go text template and can be an absolute path or relative to "cwd"
+        # available go text template variables are:
+        # - "cwd" or current working directory relative to the configuration file directory
+        # - "target" name of the target
+        html: "index.html"
+        script: "index.js"
+        ## example with go text template
+        stylesheet: "{{ "{{ .cwd }}" }}/index.css"

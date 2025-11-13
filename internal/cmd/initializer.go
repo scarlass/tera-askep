@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -46,8 +45,7 @@ func (io *InitOperation) action(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	filenameTemplate := fmt.Sprintf("%s.template", utils.DEFAULT_CONF_FILE)
-	content, err := resource.Tmpl.Get(filenameTemplate, map[string]any{
+	content, err := resource.Tmpl.Get("config.template", map[string]any{
 		"conf_loc": cwd,
 	})
 

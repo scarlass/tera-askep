@@ -55,7 +55,7 @@ func (io *InitOperation) action(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err = os.WriteFile(filename, content, os.ModeAppend); err != nil {
+	if err = os.WriteFile(filename, content, 0755); err != nil {
 		return err
 	}
 

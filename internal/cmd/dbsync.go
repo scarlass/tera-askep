@@ -24,8 +24,8 @@ var SyncOp = SyncOperation{
 
 var SyncCmd = cobra.Command{
 	Use:   "sync targets...",
-	Long:  "synchronize target project to teramedik master",
-	Short: "synchronize target project to teramedik master",
+	Short: "synchronize target project to teramedik askep_list table",
+	Long:  "synchronize target project to teramedik askep_list table and change form_data column",
 }
 
 func init() {

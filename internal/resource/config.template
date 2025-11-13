@@ -6,7 +6,7 @@ profile:
     default:
         # ssh connection
         # this settings is used if ur local system don't have "psql" command installed
-        # the idea was, if no local executable than the "psql" command will be execute in your prefered ssh server
+        # the idea was, if no local "psql" executable, than the "psql" command will be execute in your preferred ssh server
         # but of course, u need to make sure the ssh server can connect to the database server
         ssh:
             host: 192.168.0.11

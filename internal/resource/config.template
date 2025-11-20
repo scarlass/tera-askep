@@ -1,6 +1,6 @@
 # connection profile(s)
 # to use different profile, run the sync command with:
-#   tera-askep sync --profile <profile-name> ...target
+#   tera-askep sync --profile <profile-name> [...target]
 profile:
     # profile name are case-insensitive
     default:
@@ -31,12 +31,13 @@ target:
 
         # the paths here can use go template and it can be an absolute path or relative path to "cwd"
         # available template variables are:
-        # - "cwd" or current working directory relative to the configuration file directory
+        # - "cwd" or current working directory, is the configuration file directory location
         # - "target" name of the target
 
         # html entry, make sure it's a valid path
         html: "{{ "{{ .target }}" }}/index.html"
         # script entry, will embed the content to html and script tag if the file exist
+        # can be an array of paths to your scripts, each path will have independent script tag
         script: "{{ "{{ .target }}" }}/index.js"
         # stylesheet entry, same as script except it will add style tag in the html
         stylesheet: "{{ "{{ .cwd }}" }}/index.css"

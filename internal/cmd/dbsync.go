@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/scarlass/tera-askep/internal/cmd/dbsync"
 	"github.com/scarlass/tera-askep/internal/core"
 	"github.com/scarlass/tera-askep/internal/core/configs"
 	"github.com/scarlass/tera-askep/internal/core/logger"
@@ -24,8 +25,8 @@ var SyncOp = SyncOperation{
 
 var SyncCmd = cobra.Command{
 	Use:   "sync targets...",
-	Short: "synchronize target project to teramedik askep_list table",
-	Long:  "synchronize target project to teramedik askep_list table and change form_data column",
+	Short: "synchronize target project to askep_list table",
+	Long:  "synchronize target project to askep_list table and change form_data column",
 }
 
 func init() {
@@ -55,9 +56,9 @@ func (so *SyncOperation) setup(cmd *cobra.Command) {
 	so.sshMu = &sync.Mutex{}
 
 	fl := cmd.Flags()
-	fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, "run without sync to the database and print the html output (concated with script & stylesheet)")
-	fl.StringVarP(&SyncOp.ConfigFile, "config", "c", "", "configuration file path, also set virtual cwd based on the configuration file directory")
-	fl.StringVarP(&SyncOp.Profile, "profile", "p", "default", "specify connection profile to use in configuration file")
+	fl.StringVarP(&SyncOp.ConfigFile, "config", "c", "", dbsync.ConfigFlagDesc)
+	fl.BoolVarP(&SyncOp.Dry, "dry", "d", false, dbsync.DryFlagDesc)
+	fl.StringVarP(&SyncOp.Profile, "profile", "p", "default", dbsync.ProfileFlagDesc)
 
 	cmd.PreRunE = so.preAction
 	cmd.RunE = so.action
@@ -71,8 +72,10 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 
 	so.cwd = cwd
 	so.logger.SetDry(so.Dry)
-	so.conf.Profiles.Configure()
+
+	delete(so.conf.Targets, "*")
 	so.conf.Targets.Configure(cwd)
+	so.conf.Profiles.Configure()
 
 	if so.Profile == "" {
 		return core.ErrEmptyProfile
@@ -170,27 +173,40 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 		`, target.Name, target.Html)
 	}
 
-	if utils.FileExist(target.Script) {
-		rel, _ := filepath.Rel(so.cwd, target.Script)
-		so.logger.Printf("[%s] embedding script into html -> %s", target.Name, rel)
+	if len(target.Script) > 0 {
+		for _, script := range target.Script {
+			if utils.FileExist(script) {
+				continue
+			}
 
-		script, _ := os.ReadFile(target.Script)
-		content = append(content,
-			"<script>",
-			string(script),
-			"</script>",
-		)
+			rel, _ := filepath.Rel(so.cwd, script)
+			so.logger.Printf("[%s] embedding script into html -> %s", target.Name, rel)
+
+			script, _ := os.ReadFile(script)
+			content = append(content,
+				"<script>",
+				string(script),
+				"</script>",
+			)
+		}
 	}
-	if utils.FileExist(target.Stylesheet) {
-		rel, _ := filepath.Rel(so.cwd, target.Stylesheet)
-		so.logger.Printf("[%s] embedding stylesheet into html -> %s", target.Name, rel)
 
-		stylesheet, _ := os.ReadFile(target.Stylesheet)
-		content = append(content,
-			"<style>",
-			string(stylesheet),
-			"</style>",
-		)
+	if len(target.Stylesheet) > 0 {
+		for _, style := range target.Stylesheet {
+			if utils.FileExist(style) {
+				continue
+			}
+
+			rel, _ := filepath.Rel(so.cwd, style)
+			so.logger.Printf("[%s] embedding stylesheet into html -> %s", target.Name, rel)
+
+			script, _ := os.ReadFile(style)
+			content = append(content,
+				"<style>",
+				string(script),
+				"</style>",
+			)
+		}
 	}
 
 	html, _ := os.ReadFile(target.Html)

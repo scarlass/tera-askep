@@ -8,6 +8,10 @@ import (
 func main() {
 	root := cobra.Command{
 		Use: "tera-askep",
+		CompletionOptions: cobra.CompletionOptions{
+			HiddenDefaultCmd:  true,
+			DisableDefaultCmd: true,
+		},
 	}
 
 	root.AddCommand(&cmd.InitCmd, &cmd.SyncCmd)

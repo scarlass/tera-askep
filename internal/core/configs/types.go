@@ -153,10 +153,9 @@ type TargetConfig struct {
 	Name string
 	Alid int `mapstructure:"alid"`
 
-	// Path       string
 	Html       string             `mapstructure:"html"`
-	Stylesheet string             `mapstructure:"stylesheet"`
-	Script     string             `mapstructure:"script"`
+	Stylesheet []string           `mapstructure:"stylesheet"`
+	Script     []string           `mapstructure:"script"`
 	Options    TargetOptionConfig `mapstructure:"options"`
 }
 type TargetOptionConfig struct {
@@ -164,8 +163,6 @@ type TargetOptionConfig struct {
 }
 
 func (ts *TargetConfigs) Configure(cwd string) {
-	delete(*ts, "*")
-
 	for name, conf := range *ts {
 		conf.SetPaths(cwd, name)
 		(*ts)[name] = conf
@@ -179,11 +176,23 @@ func (t *TargetConfig) SetPaths(cwd, name string) {
 	slog.Debug("set html path", "source", t.Html)
 	t.Html = t.withFilepath(cwd, t.Html, filepath.Join(defaultPath, "index.html"))
 
-	slog.Debug("set script path", "source", t.Script)
-	t.Script = t.withFilepath(cwd, t.Script, filepath.Join(defaultPath, "index.js"))
+	if len(t.Script) > 0 {
+		slog.Debug("set script path(s)", "source", t.Script)
+		for i, script := range t.Script {
+			t.Script[i] = t.withFilepath(cwd, script, filepath.Join(defaultPath, "index.js"))
+		}
+	} else {
+		t.Script = []string{}
+	}
 
-	slog.Debug("set stylesheet path", "source", t.Stylesheet)
-	t.Stylesheet = t.withFilepath(cwd, t.Stylesheet, filepath.Join(defaultPath, "index.css"))
+	if len(t.Stylesheet) > 0 {
+		slog.Debug("set stylesheet path(s)", "source", t.Stylesheet)
+		for i, style := range t.Stylesheet {
+			t.Stylesheet[i] = t.withFilepath(cwd, style, filepath.Join(defaultPath, "index.css"))
+		}
+	} else {
+		t.Stylesheet = []string{}
+	}
 }
 
 func (t *TargetConfig) withFilepath(cwd, source, defaults string) string {

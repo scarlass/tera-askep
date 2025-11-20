@@ -52,7 +52,7 @@ func Load(config string, target any) (cwd string, err error) {
 		if err != nil {
 			return cwd, err
 		} else if info.IsDir() {
-			return cwd, errors.New("target path is a directory")
+			return cwd, errors.New("config path is a directory")
 		}
 	}
 

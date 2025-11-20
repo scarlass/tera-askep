@@ -16,7 +16,7 @@ var InitOp = InitOperation{
 }
 var InitCmd = cobra.Command{
 	Use:   "init",
-	Long:  "initialize sync configuration file",
+	Long:  "initialize sync configuration file in current working directory",
 	Short: "initialize sync configuration file",
 }
 

@@ -4,23 +4,63 @@
 profile:
     # profile name are case-insensitive
     default:
+        {{ if .env }}
+        # keeping profile structure/name when reading
+        # use this only if u omit all settings key (ssh, database), just like current settings
+        env: true
+
+        # by default the application also search for matching env key in format:
+        # PROFILE_<profile-name-uppercase>_<setting>_<field>
+        #
+        # example:
+        # PROFILE_DEFAULT_SSH_HOST=...
+
         # ssh connection
-        # this settings is used if ur local system don't have "psql" command installed
+        # this settings is used if your local system don't have "psql" command installed
+        # the idea was, if no local "psql" executable, than the "psql" command will be execute in your preferred ssh server
+        # but of course, u need to make sure the ssh server can connect to the database server
+        # ssh:
+        #     host: <changeme>
+        #     port: 22
+        #     user: <changeme>
+        #     password: <changeme>
+
+        # database connection
+        # database:
+        #     host: <changeme>
+        #     port: <changeme>
+        #     user: <changeme>
+        #     password: <changeme>
+        #     database: <changeme>
+        {{ else }}
+        # keeping profile structure/name when reading
+        # use this only if u omit all settings from profile
+        # env: true
+
+        # by default the application also search for matching env key in format:
+        # PROFILE_<profile-name-uppercase>_<setting>_<field>
+        #
+        # example:
+        # PROFILE_DEFAULT_SSH_HOST=...
+
+        # ssh connection
+        # this settings is used if your local system don't have "psql" command installed
         # the idea was, if no local "psql" executable, than the "psql" command will be execute in your preferred ssh server
         # but of course, u need to make sure the ssh server can connect to the database server
         ssh:
-            host: 192.168.0.11
+            host: <changeme>
             port: 22
             user: <changeme>
             password: <changeme>
 
         # database connection
         database:
-            host: 192.168.0.15
-            port: 5432
+            host: <changeme>
+            port: <changeme>
             user: <changeme>
             password: <changeme>
             database: <changeme>
+        {{ end }}
 
 target:
     # target name are case-insensitive

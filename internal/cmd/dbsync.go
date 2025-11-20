@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"github.com/scarlass/tera-askep/internal/core/ssh"
 	"github.com/scarlass/tera-askep/internal/core/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var SyncOp = SyncOperation{
@@ -65,10 +67,14 @@ func (so *SyncOperation) setup(cmd *cobra.Command) {
 }
 
 func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
-	cwd, err := configs.Load(so.ConfigFile, &so.conf)
+	// dbsync.LoadEnv($so)
+	cwd, err := configs.FindAndLoad(so.ConfigFile, &so.conf)
 	if err != nil {
 		return err
 	}
+
+	jsoned, _ := json.MarshalIndent(viper.AllSettings(), "", "    ")
+	so.logger.Debugf("loaded config: %s", string(jsoned))
 
 	so.cwd = cwd
 	so.logger.SetDry(so.Dry)

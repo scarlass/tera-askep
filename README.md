@@ -1,5 +1,5 @@
 # Tera Askep
-synchronize your form directly
+synchronize your form directly to `askep_list` table.
 
 ## Requirement
 - Go cli (>= v1.23.5 - for installation)
@@ -12,6 +12,7 @@ go install github.com/scarlass/tera-askep@latest
 ```
 
 ## Usage
+cli usage:
 ```bash
 Usage:
   tera-askep [command]
@@ -24,5 +25,7 @@ Available Commands:
 Flags:
   -h, --help   help for tera-askep
 ```
+
+config example:
 
 more examples can be seen in [tera-askep-form](https://github.com/scarlass/tera-askep-form)

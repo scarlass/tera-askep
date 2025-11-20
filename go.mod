@@ -3,6 +3,7 @@ module github.com/scarlass/tera-askep
 go 1.25.3
 
 require (
+	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.43.0

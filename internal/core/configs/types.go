@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -22,10 +23,31 @@ type SSHConfig struct {
 	Password string `mapstructure:"password"`
 }
 
-func (sc *SSHConfig) configure() {
+func (sc *SSHConfig) configure(profileName string) {
 	if sc.validatedMu == nil {
 		sc.validatedMu = &sync.Mutex{}
 	}
+
+	if v, ok := LookupEnv(profileName, "ssh", "host"); ok && sc.Host == "" {
+		sc.Host = v
+	}
+	if v, ok := LookupEnv(profileName, "ssh", "port"); ok && sc.Port == 0 {
+		if v != "" {
+			port, err := strconv.Atoi(v)
+			if err != nil {
+				panic(fmt.Errorf("unable to convert from %q to int: %w", v, err))
+			}
+
+			sc.Port = port
+		}
+	}
+	if v, ok := LookupEnv(profileName, "ssh", "user"); ok && sc.User == "" {
+		sc.User = v
+	}
+	if v, ok := LookupEnv(profileName, "ssh", "password"); ok && sc.Password == "" {
+		sc.Password = v
+	}
+
 }
 func (sc *SSHConfig) Validate() error {
 	if sc.validatedMu != nil {
@@ -63,13 +85,42 @@ type DatabaseConfig struct {
 	Schema   string `mapstructure:"schema"`
 }
 
-func (dc *DatabaseConfig) configure() {}
+func (dc *DatabaseConfig) configure(profileName string) {
+
+	if v, ok := LookupEnv(profileName, "database", "host"); ok && dc.Host == "" {
+		dc.Host = v
+	}
+	if v, ok := LookupEnv(profileName, "database", "port"); ok && dc.Port == 0 {
+		if v != "" {
+			port, err := strconv.Atoi(v)
+			if err != nil {
+				panic(fmt.Errorf("unable to convert from %q to int: %w", v, err))
+			}
+
+			dc.Port = port
+		}
+	}
+	if v, ok := LookupEnv(profileName, "database", "user"); ok && dc.User == "" {
+		dc.User = v
+	}
+	if v, ok := LookupEnv(profileName, "database", "password"); ok && dc.Password == "" {
+		dc.Password = v
+	}
+	if v, ok := LookupEnv(profileName, "database", "database"); ok && dc.Database == "" {
+		dc.Database = v
+	}
+	if v, ok := LookupEnv(profileName, "database", "schema"); ok && dc.Schema == "" {
+		dc.Schema = v
+	}
+}
 func (dc *DatabaseConfig) Validate() error {
 	if dc.Host == "" {
-		dc.Host = "192.168.0.15"
+		// dc.Host = "192.168.0.15"
+		return errors.New("database.host cannot be empty")
 	}
 	if dc.Port == 0 {
-		dc.Port = 5432
+		// dc.Port = 5432
+		return errors.New("database.port cannot be empty")
 	}
 	if dc.User == "" {
 		return errors.New("database.user cannot be empty")
@@ -78,7 +129,8 @@ func (dc *DatabaseConfig) Validate() error {
 		return errors.New("database.password cannot be empty")
 	}
 	if dc.Database == "" {
-		dc.Database = "teramedik_master"
+		// dc.Database = "teramedik_master"
+		return errors.New("database.database cannot be empty")
 	}
 	if dc.Schema == "" {
 		dc.Schema = "public"
@@ -94,6 +146,7 @@ type (
 	ProfileConfigs map[string]ProfileConfig
 	ProfileConfig  struct {
 		Name     string
+		Env      bool           `mapstructure:"env"`
 		Ssh      SSHConfig      `mapstructure:"ssh"`
 		Database DatabaseConfig `mapstructure:"database"`
 	}
@@ -102,8 +155,8 @@ type (
 func (pcs ProfileConfigs) ValidateAndGet(profile string) (*ProfileConfig, error) {
 	if act, ok := pcs.Included(profile); ok {
 		p := pcs[act]
-		p.Ssh.configure()
-		p.Database.configure()
+		p.Ssh.configure(profile)
+		p.Database.configure(profile)
 
 		if err := p.Database.Validate(); err != nil {
 			return nil, err

@@ -34,7 +34,7 @@ profile:
         #     database: <changeme>
         {{ else }}
         # keeping profile structure/name when reading
-        # use this only if u omit all settings from profile
+        # use this only if u omit all settings key (ssh, database)
         # env: true
 
         # by default the application also search for matching env key in format:

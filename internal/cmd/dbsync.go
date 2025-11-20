@@ -119,6 +119,9 @@ func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
 		return so.action_dry()
 	}
 
+	jsoned, _ := json.MarshalIndent(so.conf, "", "    ")
+	so.logger.Debugf("serialized config: %s", string(jsoned))
+
 	return so.action_main()
 }
 func (so *SyncOperation) action_dry() error {
@@ -179,9 +182,10 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 		`, target.Name, target.Html)
 	}
 
+	so.logger.Debug("total script(s)", "count", len(target.Script))
 	if len(target.Script) > 0 {
 		for _, script := range target.Script {
-			if utils.FileExist(script) {
+			if !utils.FileExist(script) {
 				continue
 			}
 
@@ -197,9 +201,13 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 		}
 	}
 
+	so.logger.Debug("total stylesheet(s)", "count", len(target.Stylesheet))
 	if len(target.Stylesheet) > 0 {
-		for _, style := range target.Stylesheet {
-			if utils.FileExist(style) {
+		for i, style := range target.Stylesheet {
+			exist := utils.FileExist(style)
+			so.logger.Debugf("%d. %s exist ? %s", i+1, style, exist)
+
+			if !exist {
 				continue
 			}
 

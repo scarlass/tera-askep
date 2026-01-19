@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/scarlass/tera-askep/internal/cmd/dbsync"
 	"github.com/scarlass/tera-askep/internal/core"
 	"github.com/scarlass/tera-askep/internal/core/configs"
+	"github.com/scarlass/tera-askep/internal/core/db"
 	"github.com/scarlass/tera-askep/internal/core/logger"
 	"github.com/scarlass/tera-askep/internal/core/ssh"
 	"github.com/scarlass/tera-askep/internal/core/utils"
@@ -43,9 +45,12 @@ type SyncOperation struct {
 	logger logger.Logger
 	cwd    string
 
-	confTargets []configs.TargetConfig
-	confProfile *configs.ProfileConfig
-	conf        struct {
+	targetsConf []configs.TargetConfig
+
+	profileConf *configs.ProfileConfig
+	profileDb   *db.Database
+
+	conf struct {
 		Profiles configs.ProfileConfigs `mapstructure:"profile"`
 		Targets  configs.TargetConfigs  `mapstructure:"target"`
 	}
@@ -87,10 +92,10 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 		return core.ErrEmptyProfile
 	}
 
-	if so.confProfile, err = so.conf.Profiles.ValidateAndGet(so.Profile); err != nil {
+	if so.profileConf, err = so.conf.Profiles.ValidateAndGet(so.Profile); err != nil {
 		return err
 	} else {
-		so.logger.Printf(`using "%s" profile`, so.confProfile.Name)
+		so.logger.Printf(`using "%s" profile`, so.profileConf.Name)
 	}
 
 	if len(so.conf.Targets) == 0 {
@@ -102,14 +107,24 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 	so.logger.Debug("available targets", "targets", so.conf.Targets.Keys())
 	so.logger.Debug("command arguments", "args", args)
 
-	so.confTargets = make([]configs.TargetConfig, 0)
+	so.targetsConf = make([]configs.TargetConfig, 0)
 	for _, spec := range args {
 		if act, ok := so.conf.Targets.Included(spec); !ok {
 			return fmt.Errorf("unknown target (%s) in argument(s)", spec)
 		} else {
-			so.confTargets = append(so.confTargets, so.conf.Targets[act])
+			so.targetsConf = append(so.targetsConf, so.conf.Targets[act])
 		}
 	}
+
+	so.profileDb, err = db.New(cmd.Context(), so.profileConf.Database)
+	if err != nil {
+		return fmt.Errorf("create db connection (profile - %s): %w", so.profileConf.Name, err)
+	}
+
+	// for _, prof := range so.conf.Profiles {
+
+	// 	so.profileDb[prof.Name] = db
+	// }
 
 	return nil
 }
@@ -125,7 +140,7 @@ func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
 	return so.action_main()
 }
 func (so *SyncOperation) action_dry() error {
-	for _, conf := range so.confTargets {
+	for _, conf := range so.targetsConf {
 		content, err := so.concat_target_files(conf)
 
 		if err != nil {
@@ -136,36 +151,47 @@ func (so *SyncOperation) action_dry() error {
 	}
 	return nil
 }
-func (so *SyncOperation) action_main() error {
-	psql, err := exec.LookPath("psql")
-	psqlExist := err == nil
+func (so *SyncOperation) action_main(ctx context.Context) error {
+	// psql, err := exec.LookPath("psql")
+	// psqlExist := err == nil
 
-	if psqlExist {
-		so.logger.Printf("using local psql executable\n")
-	}
+	// if psqlExist {
+	// 	so.logger.Printf("using local psql executable\n")
+	// }
 
-	defer so.ssh.Close()
+	// defer so.ssh.Close()
 
 	var wg sync.WaitGroup
-	for _, conf := range so.confTargets {
-		wg.Go(func() {
-			content, err := so.concat_target_files(conf)
-			if err != nil {
-				panic(err)
-			}
+	for _, conf := range so.targetsConf {
+		content, err := so.concat_target_files(conf)
+		if err != nil {
+			return err
+		}
 
-			so.logger.Debug("force ssh enabled ?",
-				"target", conf.Name,
-				"enabled", conf.Options.ForceSSH)
+		b64Content := base64.StdEncoding.EncodeToString([]byte(content))
+		if err := so.profileDb.UpdateAskepList(ctx, conf, b64Content); err != nil {
+			return err
+		}
+		// so.profileDb.UpdateAskepList(so.)
+		// wg.Go(func() {
+		// 	content, err := so.concat_target_files(conf)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
 
-			if conf.Options.ForceSSH || !psqlExist {
-				utils.Must(1, so.psql_remote_exec(conf, content))
-			} else {
-				utils.Must(1, so.psql_local_exec(psql, conf, content))
-			}
+		// 	so.logger.Debug("force ssh enabled ?",
+		// 		"target", conf.Name,
+		// 		"enabled", conf.Options.ForceSSH)
 
-			so.logger.Printf("[%s] success", conf.Name)
-		})
+		// 	if conf.Options.ForceSSH || !psqlExist {
+		// 		utils.Must(1, so.psql_remote_exec(conf, content))
+		// 	} else {
+		// 		utils.Must(1, so.psql_local_exec(psql, conf, content))
+		// 	}
+
+		// 	so.logger.Printf("[%s] success", conf.Name)
+		// })
+
 	}
 	wg.Wait()
 
@@ -180,25 +206,6 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 		[%s] properly specify target html in configuration and make sure the file exists:
 		    - current html path -> %s (not found)
 		`, target.Name, target.Html)
-	}
-
-	so.logger.Debug("total script(s)", "count", len(target.Script))
-	if len(target.Script) > 0 {
-		for _, script := range target.Script {
-			if !utils.FileExist(script) {
-				continue
-			}
-
-			rel, _ := filepath.Rel(so.cwd, script)
-			so.logger.Printf("[%s] embedding script into html -> %s", target.Name, rel)
-
-			script, _ := os.ReadFile(script)
-			content = append(content,
-				"<script>",
-				string(script),
-				"</script>",
-			)
-		}
 	}
 
 	so.logger.Debug("total stylesheet(s)", "count", len(target.Stylesheet))
@@ -225,6 +232,26 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 
 	html, _ := os.ReadFile(target.Html)
 	content = append(content, string(html))
+
+	so.logger.Debug("total script(s)", "count", len(target.Script))
+	if len(target.Script) > 0 {
+		for _, script := range target.Script {
+			if !utils.FileExist(script) {
+				continue
+			}
+
+			rel, _ := filepath.Rel(so.cwd, script)
+			so.logger.Printf("[%s] embedding script into html -> %s", target.Name, rel)
+
+			script, _ := os.ReadFile(script)
+			content = append(content,
+				"<script>",
+				string(script),
+				"</script>",
+			)
+		}
+	}
+
 	return strings.Join(content, "\n"), nil
 }
 
@@ -240,14 +267,14 @@ func (so *SyncOperation) psql_prepare_arguments(alid int, content string) []stri
 		map[string]any{
 			"alid":    alid,
 			"content": b64Content,
-			"schema":  so.confProfile.Database.Schema,
+			"schema":  so.profileConf.Database.Schema,
 		}))
 
 	return []string{
-		"-h", so.confProfile.Database.Host,
-		"-p", strconv.Itoa(so.confProfile.Database.Port),
-		"-U", so.confProfile.Database.User,
-		"-d", so.confProfile.Database.Database,
+		"-h", so.profileConf.Database.Host,
+		"-p", strconv.Itoa(so.profileConf.Database.Port),
+		"-U", so.profileConf.Database.User,
+		"-d", so.profileConf.Database.Database,
 		"-c", sql,
 	}
 }
@@ -256,7 +283,7 @@ func (so *SyncOperation) psql_local_exec(psql string, target configs.TargetConfi
 	so.logger.Printf("[%s] psql prepared argument(s) %q", target.Name, strings.Join(args[0:len(args)-2], " "))
 
 	cmd := exec.Command(psql, args...)
-	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.confProfile.Database.Password)
+	cmd.Env = append(cmd.Env, "PGPASSWORD="+so.profileConf.Database.Password)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -269,7 +296,7 @@ func (so *SyncOperation) psql_local_exec(psql string, target configs.TargetConfi
 func (so *SyncOperation) psql_remote_exec(target configs.TargetConfig, content string) (err error) {
 	so.sshMu.Lock()
 	if so.ssh == nil {
-		if so.ssh, err = ssh.New(so.confProfile.Ssh); err != nil {
+		if so.ssh, err = ssh.New(so.profileConf.Ssh); err != nil {
 			so.sshMu.Unlock()
 			panic(err)
 		}
@@ -284,7 +311,7 @@ func (so *SyncOperation) psql_remote_exec(target configs.TargetConfig, content s
 	so.logger.Printf("[%s] psql prepared argument(s) %q", target.Name, strings.Join(args[0:len(args)-2], " "))
 	args[last] = fmt.Sprintf(`"%s"`, args[last])
 
-	if err := so.ssh.Exec(fmt.Sprintf("PGPASSWORD=%s; psql", so.confProfile.Database.Password), args...); err != nil {
+	if err := so.ssh.Exec(fmt.Sprintf("PGPASSWORD=%s; psql", so.profileConf.Database.Password), args...); err != nil {
 		return err
 	}
 

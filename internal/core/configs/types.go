@@ -77,12 +77,12 @@ func (sc *SSHConfig) Validate() error {
 }
 
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Database string `mapstructure:"database"`
-	Schema   string `mapstructure:"schema"`
+	Host     string `mapstructure:"host" dsn:"host"`
+	Port     int    `mapstructure:"port" dsn:"port"`
+	User     string `mapstructure:"user" dsn:"user"`
+	Password string `mapstructure:"password" dsn:"password"`
+	Database string `mapstructure:"database" dsn:"dbname"`
+	Schema   string `mapstructure:"schema" dsn:"search_path"`
 }
 
 func (dc *DatabaseConfig) configure(profileName string) {

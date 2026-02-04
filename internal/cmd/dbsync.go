@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +71,7 @@ func (so *SyncOperation) setup(cmd *cobra.Command) {
 
 	cmd.PreRunE = so.preAction
 	cmd.RunE = so.action
+	cmd.PostRunE = so.postAction
 }
 
 func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
@@ -116,7 +119,7 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	so.profileDb, err = db.New(cmd.Context(), so.profileConf.Database)
+	so.profileDb, err = db.New(cmd.Context(), so.logger, so.profileConf.Database)
 	if err != nil {
 		return fmt.Errorf("create db connection (profile - %s): %w", so.profileConf.Name, err)
 	}
@@ -128,6 +131,12 @@ func (so *SyncOperation) preAction(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
+func (so *SyncOperation) postAction(cmd *cobra.Command, args []string) error {
+	if so.profileDb != nil {
+		so.profileDb.Close()
+	}
+	return nil
+}
 
 func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
 	if so.Dry {
@@ -137,7 +146,7 @@ func (so *SyncOperation) action(cmd *cobra.Command, args []string) error {
 	jsoned, _ := json.MarshalIndent(so.conf, "", "    ")
 	so.logger.Debugf("serialized config: %s", string(jsoned))
 
-	return so.action_main()
+	return so.action_main(cmd.Context())
 }
 func (so *SyncOperation) action_dry() error {
 	for _, conf := range so.targetsConf {
@@ -189,7 +198,7 @@ func (so *SyncOperation) action_main(ctx context.Context) error {
 		// 		utils.Must(1, so.psql_local_exec(psql, conf, content))
 		// 	}
 
-		// 	so.logger.Printf("[%s] success", conf.Name)
+		so.logger.Printf("[%s] success", conf.Name)
 		// })
 
 	}
@@ -199,7 +208,9 @@ func (so *SyncOperation) action_main(ctx context.Context) error {
 }
 
 func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (string, error) {
-	content := []string{}
+	scripts := []string{}
+	stylesheets := []string{}
+	// content := []string{}
 
 	if !utils.FileExist(target.Html) {
 		return "", fmt.Errorf(`
@@ -221,17 +232,16 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 			rel, _ := filepath.Rel(so.cwd, style)
 			so.logger.Printf("[%s] embedding stylesheet into html -> %s", target.Name, rel)
 
-			script, _ := os.ReadFile(style)
-			content = append(content,
-				"<style>",
-				string(script),
-				"</style>",
-			)
+			section, _ := os.ReadFile(style)
+			section_str := "<style>\n" + string(section) + "\n</style>"
+
+			stylesheets = append(stylesheets, section_str)
+			// content = append(content, section_str)
 		}
 	}
 
-	html, _ := os.ReadFile(target.Html)
-	content = append(content, string(html))
+	// html, _ := os.ReadFile(target.Html)
+	// content = append(content, string(html))
 
 	so.logger.Debug("total script(s)", "count", len(target.Script))
 	if len(target.Script) > 0 {
@@ -243,16 +253,48 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 			rel, _ := filepath.Rel(so.cwd, script)
 			so.logger.Printf("[%s] embedding script into html -> %s", target.Name, rel)
 
-			script, _ := os.ReadFile(script)
-			content = append(content,
-				"<script>",
-				string(script),
-				"</script>",
-			)
+			section, _ := os.ReadFile(script)
+			section_str := "<script>\n" + string(section) + "\n</script>"
+
+			scripts = append(scripts, section_str)
 		}
 	}
 
-	return strings.Join(content, "\n"), nil
+	html, _ := os.ReadFile(target.Html)
+
+	ss_rgx := regexp.MustCompile(`\{\{\s*\.Stylesheet\s*\}\}`)
+	ss_indexes := ss_rgx.FindSubmatchIndex(html)
+	if len(ss_indexes) > 0 {
+		html = slices.Concat(
+			html[:ss_indexes[0]],
+			[]byte(strings.Join(stylesheets, "\n")),
+			html[ss_indexes[1]:],
+		)
+	} else {
+		html = slices.Concat(
+			[]byte(strings.Join(stylesheets, "\n")),
+			[]byte{'\n', '\n'},
+			html,
+		)
+	}
+
+	scr_rgx := regexp.MustCompile(`\{\{\s*\.Script\s*\}\}`)
+	scr_indexes := scr_rgx.FindSubmatchIndex(html)
+	if len(scr_indexes) > 0 {
+		html = slices.Concat(
+			html[:scr_indexes[0]],
+			[]byte(strings.Join(scripts, "\n")),
+			html[scr_indexes[1]:],
+		)
+	} else {
+		html = slices.Concat(
+			html,
+			[]byte{'\n', '\n'},
+			[]byte(strings.Join(scripts, "\n")),
+		)
+	}
+
+	return string(html), nil
 }
 
 func (so *SyncOperation) psql_prepare_arguments(alid int, content string) []string {

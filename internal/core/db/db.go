@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/scarlass/tera-askep/internal/core"
 	"github.com/scarlass/tera-askep/internal/core/configs"
+	"github.com/scarlass/tera-askep/internal/core/logger"
 	"github.com/scarlass/tera-askep/internal/core/utils"
 )
 
@@ -31,10 +33,11 @@ func to_dsn(conf configs.DatabaseConfig) (*pgxpool.Config, error) {
 }
 
 type Database struct {
-	pool *pgxpool.Pool
+	logger logger.Logger
+	pool   *pgxpool.Pool
 }
 
-func New(ctx context.Context, conf configs.DatabaseConfig) (*Database, error) {
+func New(ctx context.Context, log logger.Logger, conf configs.DatabaseConfig) (*Database, error) {
 	pgxconf, err := to_dsn(conf)
 	if err != nil {
 		return nil, err
@@ -49,7 +52,11 @@ func New(ctx context.Context, conf configs.DatabaseConfig) (*Database, error) {
 		return nil, err
 	}
 
-	return &Database{pool}, nil
+	return &Database{log, pool}, nil
+}
+
+func (db *Database) Close() {
+	db.pool.Close()
 }
 
 func (db *Database) UpdateAskepList(ctx context.Context, target configs.TargetConfig, b64Content string) (err error) {
@@ -91,6 +98,11 @@ func (db *Database) UpdateAskepList(ctx context.Context, target configs.TargetCo
 			"content": b64Content,
 		}))
 
-	_, err = tx.Exec(ctx, sql)
+	var tag pgconn.CommandTag
+	tag, err = tx.Exec(ctx, sql)
+
+	if err == nil {
+		db.logger.Printf("[%s] affected %d", target.Name, tag.RowsAffected())
+	}
 	return
 }

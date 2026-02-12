@@ -1,0 +1,12 @@
+# in somecase, if u don't want to commit your configuration settings into git (like database credential)
+# u can keep your setting as env, but u need to keep profile name in the configuration file
+#
+# env key format:
+# PROFILE_<profile-name-upper>_<setting>_<prop>
+
+PROFILE_DEFAULT_DATABASE_HOST=-
+PROFILE_DEFAULT_DATABASE_PORT=-
+PROFILE_DEFAULT_DATABASE_USER=-
+PROFILE_DEFAULT_DATABASE_PASSWORD=-
+PROFILE_DEFAULT_DATABASE_DATABASE=-
+PROFILE_DEFAULT_DATABASE_SCHEMA=-

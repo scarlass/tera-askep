@@ -233,7 +233,7 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 			so.logger.Printf("[%s] embedding stylesheet into html -> %s", target.Name, rel)
 
 			section, _ := os.ReadFile(style)
-			section_str := "<style>\n" + string(section) + "\n</style>"
+			section_str := "<!-- " + style + " -->\n<style>\n" + string(section) + "\n</style>"
 
 			stylesheets = append(stylesheets, section_str)
 			// content = append(content, section_str)
@@ -254,7 +254,7 @@ func (so *SyncOperation) concat_target_files(target configs.TargetConfig) (strin
 			so.logger.Printf("[%s] embedding script into html -> %s", target.Name, rel)
 
 			section, _ := os.ReadFile(script)
-			section_str := "<script>\n" + string(section) + "\n</script>"
+			section_str := "<!-- " + script + " -->\n<script>\n" + string(section) + "\n</script>"
 
 			scripts = append(scripts, section_str)
 		}

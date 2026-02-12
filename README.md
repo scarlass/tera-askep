@@ -3,8 +3,6 @@ synchronize your form directly to `askep_list` table.
 
 ## Requirement
 - Go cli (>= v1.23.5 - for installation)
-- SSH
-- Psql cli
 
 ## Installation
 ```bash
@@ -13,7 +11,7 @@ go install github.com/scarlass/tera-askep@latest
 
 ## Usage
 cli usage:
-```bash
+```
 Usage:
   tera-askep [command]
 

@@ -1,0 +1,63 @@
+# connection profile(s)
+# to use different profile, run the sync command with:
+#   tera-askep sync --profile <profile-name> [...target]
+profile:
+    # profile name are case-insensitive
+    default:
+        {{ if .env }}
+        # use this only if u omit all settings key (database) for keeping this profile structure/name when application reading this config,
+        # just like current settings
+        env: true
+
+        # by default the application also search for matching env key in format:
+        # PROFILE_<profile-name-uppercase>_<setting>_<field>
+        #
+        # example:
+        # PROFILE_DEFAULT_DATABASE_HOST=...
+
+        # database connection
+        # database:
+        #     host: <changeme>
+        #     port: <changeme>
+        #     user: <changeme>
+        #     password: <changeme>
+        #     database: <changeme>
+        {{ else }}
+        # use this only if u omit all settings key (database) for keeping this profile structure/name when application reading this config
+        # env: true
+
+        # by default the application also search for matching env key in format:
+        # PROFILE_<profile-name-uppercase>_<setting>_<field>
+        #
+        # example:
+        # PROFILE_DEFAULT_DATABASE_HOST=...
+
+        # database connection
+        database:
+            host: <changeme>
+            port: <changeme>
+            user: <changeme>
+            password: <changeme>
+            database: <changeme>
+        {{ end }}
+
+target:
+    # target name are case-insensitive
+
+    # this entry is only for example and will be count as non-exist at runtime
+    "*":
+        # askep list row id
+        alid: 123
+
+        # the paths here can use go template and it can be an absolute path or relative path to "cwd"
+        # available template variables are:
+        # - "cwd" or current working directory, is the configuration file directory location
+        # - "target" name of the target entry
+
+        # html entry, make sure it's a valid path
+        html: "{{ "{{ .target }}" }}/index.html"
+        # script entry, will embed the content to html and script tag if the file exist
+        # can be an array of paths to your scripts, each path will have independent script tag
+        script: "{{ "{{ .target }}" }}/index.js"
+        # stylesheet entry, same as script except it will use style tag in the html
+        stylesheet: "{{ "{{ .cwd }}" }}/index.css"

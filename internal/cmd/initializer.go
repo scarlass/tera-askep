@@ -49,7 +49,7 @@ func (io *InitOperation) action(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	content, err := resource.Tmpl.Get("config.template", map[string]any{
+	content, err := resource.Tmpl.Get("config-2.template", map[string]any{
 		"conf_loc": cwd,
 		"env":      io.Env,
 	})
@@ -63,7 +63,7 @@ func (io *InitOperation) action(cmd *cobra.Command, args []string) error {
 	}
 
 	if io.Env {
-		envContent, err := resource.Tmpl.Get("env.template", map[string]any{})
+		envContent, err := resource.Tmpl.Get("env-2.template", map[string]any{})
 		if err != nil {
 			return err
 		}

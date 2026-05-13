@@ -10,20 +10,19 @@ go install github.com/scarlass/tera-askep@latest
 ```
 
 ## Usage
-cli usage:
 ```
 Usage:
-  tera-askep [command]
+tera-askep [command]
 
 Available Commands:
-  help        Help about any command
-  init        initialize sync configuration file
-  sync        synchronize target project to askep_list table
+help        Help about any command
+init        initialize sync configuration file
+sync        synchronize target project to askep_list table
 
 Flags:
-  -h, --help   help for tera-askep
+-h, --help   help for tera-askep
 ```
 
 config example:
 
-more examples can be seen in [tera-askep-form](https://github.com/scarlass/tera-askep-form)
+more examples can be seen in [tera-askep-form](https://github.com/scarlass/tera-askep-forms)
